@@ -17,7 +17,7 @@ type TrackState = {
   muted: boolean;
 };
 
-const BASE_BPM = 95; // replace with the original tempo of your track
+const BASE_BPM = 100;
 
 const INITIAL_TRACKS: Record<TrackName, TrackState> = {
   bass: { buffer: null, processedBuffer: null, muted: false },
@@ -36,6 +36,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [baseBpm, setBaseBpm] = useState(BASE_BPM);
   const [bpm, setBpm] = useState<number>(BASE_BPM);
   const [pitchSemitones, setPitchSemitones] = useState(0);
 
@@ -53,6 +54,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (selectedSong) {
       setBpm(selectedSong.tempo);
+    }
+  }, [selectedSong]);
+
+  useEffect(() => {
+    if (selectedSong) {
+      setBpm(selectedSong.tempo);
+      setBaseBpm(selectedSong.tempo);
     }
   }, [selectedSong]);
 
@@ -86,7 +94,7 @@ const App: React.FC = () => {
 
       const soundTouch = new SoundTouch(originalBuffer.sampleRate);
 
-      const tempoRatio = bpm / BASE_BPM;
+      const tempoRatio = bpm / baseBpm;
       soundTouch.tempo = tempoRatio;
 
       const pitchRatio = Math.pow(2, pitchSemitones / 12);
@@ -200,8 +208,8 @@ const App: React.FC = () => {
                 <input
                   className="form-range"
                   type="range"
-                  min={BASE_BPM - 50}
-                  max={BASE_BPM + 50}
+                  min={baseBpm - 50}
+                  max={baseBpm + 50}
                   step={1}
                   value={bpm}
                   onChange={(e) => setBpm(parseInt(e.target.value))}
