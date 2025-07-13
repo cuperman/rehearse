@@ -2,6 +2,13 @@ import React, { useEffect, useState } from "react";
 import * as Tone from "tone";
 import { SoundTouch, SimpleFilter, getWebAudioNode, WebAudioBufferSource } from "soundtouchjs";
 
+type Song = {
+  title: string;
+  artist: string;
+  key: string;
+  tempo: number;
+};
+
 type TrackName = "bass" | "drums" | "other" | "vocals";
 
 type TrackState = {
@@ -20,37 +27,52 @@ const INITIAL_TRACKS: Record<TrackName, TrackState> = {
 };
 
 const App: React.FC = () => {
+  const [library, setLibrary] = useState<Song[]>([]);
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [audioCtx] = useState(new AudioContext());
   const [tracks, setTracks] = useState(INITIAL_TRACKS);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [bpm, setBpm] = useState(BASE_BPM);
+  const [bpm, setBpm] = useState<number>(BASE_BPM);
   const [pitchSemitones, setPitchSemitones] = useState(0);
 
   const [sources, setSources] = useState<AudioBufferSourceNode[]>([]);
 
-  // Load all audio buffers on mount
   useEffect(() => {
-    const loadBuffers = async () => {
-      setIsLoading(true);
-      const newTracks = { ...INITIAL_TRACKS };
-
-      for (const track of Object.keys(newTracks) as TrackName[]) {
-        const response = await fetch(`/stems/this_love/${track}.wav`);
-        const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-        newTracks[track].buffer = audioBuffer;
-        newTracks[track].processedBuffer = audioBuffer; // Initially same as original
-      }
-
-      setTracks(newTracks);
-      setIsLoading(false);
+    const loadLibrary = async () => {
+      const response = await fetch("/library.json");
+      const data = await response.json();
+      setLibrary(data.songs);
     };
+    loadLibrary();
+  }, []);
 
-    loadBuffers();
-  }, [audioCtx]);
+  useEffect(() => {
+    if (selectedSong) {
+      setBpm(selectedSong.tempo);
+    }
+  }, [selectedSong]);
+
+  const loadBuffers = async (song: Song) => {
+    setIsLoading(true);
+    const newTracks = { ...INITIAL_TRACKS };
+
+    const artistEncoded = encodeURIComponent(song.artist);
+    const titleEncoded = encodeURIComponent(song.title);
+
+    for (const track of Object.keys(newTracks) as TrackName[]) {
+      const response = await fetch(`/stems/${artistEncoded}/${titleEncoded}/${track}.wav`);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+      newTracks[track].buffer = audioBuffer;
+      newTracks[track].processedBuffer = audioBuffer; // Initially same as original
+    }
+
+    setTracks(newTracks);
+    setIsLoading(false);
+  };
 
   const processAllTracks = async () => {
     setIsProcessing(true);
@@ -133,7 +155,31 @@ const App: React.FC = () => {
     <div>
       <h1>Multi-Track Player with Tempo & Pitch</h1>
 
-      {isLoading ? (
+      <div>
+        <h2>Select a Song</h2>
+        <select
+          value={selectedSong ? `${selectedSong.artist}-${selectedSong.title}` : ""}
+          onChange={(e) => {
+            const [artist, title] = e.target.value.split("-");
+            const song = library.find((s) => s.artist === artist && s.title === title);
+            if (song) {
+              setSelectedSong(song);
+              loadBuffers(song);
+            }
+          }}
+        >
+          <option value="">-- Select a song --</option>
+          {library.map((song) => (
+            <option key={`${song.artist}-${song.title}`} value={`${song.artist}-${song.title}`}>
+              {song.title} by {song.artist}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {selectedSong === null ? (
+        <p>Please select a song to begin.</p>
+      ) : isLoading ? (
         <p>Loading tracks...</p>
       ) : isProcessing ? (
         <p>Processing tempo/pitch...</p>

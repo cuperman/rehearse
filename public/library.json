@@ -1,0 +1,6 @@
+{
+  "songs": [
+    { "title": "This Love", "artist": "Maroon 5", "key": "F Minor", "tempo": 95 },
+    { "title": "Parachute", "artist": "Chris Stapleton", "key": "F# Major", "tempo": 113 }
+  ]
+}
