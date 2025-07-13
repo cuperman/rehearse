@@ -62,7 +62,7 @@ const App: React.FC = () => {
     const titleEncoded = encodeURIComponent(song.title);
 
     for (const track of Object.keys(newTracks) as TrackName[]) {
-      const response = await fetch(`/stems/${artistEncoded}/${titleEncoded}/${track}.wav`);
+      const response = await fetch(`/stems/${artistEncoded}/${titleEncoded}/${track}.mp3`);
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
