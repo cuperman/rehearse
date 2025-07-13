@@ -85,6 +85,11 @@ const App: React.FC = () => {
     setLastProcessedBpm(song.tempo);
     setLastProcessedPitch(0);
     setIsLoading(false);
+
+    // 🔧 WORKAROUND: auto-play after loading
+    setTimeout(() => {
+      handlePlay();
+    }, 0);
   };
 
   const processAllTracks = async () => {
