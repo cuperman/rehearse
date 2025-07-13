@@ -26,6 +26,8 @@ const INITIAL_TRACKS: Record<TrackName, TrackState> = {
   vocals: { buffer: null, processedBuffer: null, muted: false },
 };
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 const App: React.FC = () => {
   const [library, setLibrary] = useState<Song[]>([]);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
@@ -153,86 +155,120 @@ const App: React.FC = () => {
 
   return (
     <div>
-      <h1>Multi-Track Player with Tempo & Pitch</h1>
-
-      <div>
-        <h2>Select a Song</h2>
-        <select
-          value={selectedSong ? `${selectedSong.artist}-${selectedSong.title}` : ""}
-          onChange={(e) => {
-            const [artist, title] = e.target.value.split("-");
-            const song = library.find((s) => s.artist === artist && s.title === title);
-            if (song) {
-              setSelectedSong(song);
-              loadBuffers(song);
-            }
-          }}
-        >
-          <option value="">-- Select a song --</option>
-          {library.map((song) => (
-            <option key={`${song.artist}-${song.title}`} value={`${song.artist}-${song.title}`}>
-              {song.title} by {song.artist}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selectedSong === null ? (
-        <p>Please select a song to begin.</p>
-      ) : isLoading ? (
-        <p>Loading tracks...</p>
-      ) : isProcessing ? (
-        <p>Processing tempo/pitch...</p>
-      ) : (
-        <>
-          <div>
-            <label>Tempo (BPM): </label>
-            <input
-              type="range"
-              min={BASE_BPM - 50}
-              max={BASE_BPM + 50}
-              step={1}
-              value={bpm}
-              onChange={(e) => setBpm(parseInt(e.target.value))}
-            />
-            <span>{bpm} BPM</span>
+      <nav className="navbar navbar-dark bg-dark">
+        <div className="container">
+          <a className="navbar-brand" href="/">
+            rehearse
+          </a>
+        </div>
+      </nav>
+      <main className="container px-4 py-5">
+        <form>
+          <div className="mb-3">
+            <label className="form-label">Song</label>
+            <select
+              className="form-control"
+              value={selectedSong ? `${selectedSong.artist}-${selectedSong.title}` : ""}
+              onChange={(e) => {
+                const [artist, title] = e.target.value.split("-");
+                const song = library.find((s) => s.artist === artist && s.title === title);
+                if (song) {
+                  setSelectedSong(song);
+                  loadBuffers(song);
+                }
+              }}
+            >
+              <option>-- Select a song --</option>
+              {library.map((song) => (
+                <option key={`${song.artist}-${song.title}`} value={`${song.artist}-${song.title}`}>
+                  {song.title} by {song.artist}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div>
-            <label>Pitch (semitones): </label>
-            <input
-              type="range"
-              min={-12}
-              max={12}
-              step={1}
-              value={pitchSemitones}
-              onChange={(e) => setPitchSemitones(parseInt(e.target.value))}
-            />
-            <span>{pitchSemitones >= 0 ? `+${pitchSemitones}` : pitchSemitones} semitones</span>
-          </div>
-
-          <button onClick={processAllTracks}>Apply Tempo/Pitch</button>
-
-          {!isPlaying ? (
-            <button onClick={handlePlay} disabled={isProcessing}>
-              Play All
-            </button>
+          {selectedSong === null ? (
+            <p>Please select a song to begin.</p>
+          ) : isLoading ? (
+            <p>Loading tracks...</p>
+          ) : isProcessing ? (
+            <p>Processing tempo/pitch...</p>
           ) : (
-            <button onClick={handleStop}>Stop All</button>
-          )}
-
-          <h2>Tracks</h2>
-          {(Object.keys(tracks) as TrackName[]).map((trackName) => {
-            const track = tracks[trackName as TrackName];
-            return (
-              <div key={trackName}>
-                <span style={{ opacity: track.muted ? 0.5 : 1 }}>{trackName}</span>
-                <button onClick={() => toggleMute(trackName as TrackName)}>{track.muted ? "Unmute" : "Mute"}</button>
+            <>
+              <div className="mb-3">
+                <label className="form-label">Tempo</label>
+                <input
+                  className="form-range"
+                  type="range"
+                  min={BASE_BPM - 50}
+                  max={BASE_BPM + 50}
+                  step={1}
+                  value={bpm}
+                  onChange={(e) => setBpm(parseInt(e.target.value))}
+                />
+                <div className="form-text">{bpm} BPM</div>
               </div>
-            );
-          })}
-        </>
-      )}
+              <div className="mb-3">
+                <label className="form-label">Pitch</label>
+                <input
+                  className="form-range"
+                  type="range"
+                  min={-12}
+                  max={12}
+                  step={1}
+                  value={pitchSemitones}
+                  onChange={(e) => setPitchSemitones(parseInt(e.target.value))}
+                />
+                <div className="form-text">{pitchSemitones >= 0 ? `+${pitchSemitones}` : pitchSemitones} semitones</div>
+              </div>
+
+              <fieldset className="mb-3">
+                <legend className="col-form-label pt-0">Tracks</legend>
+                {(Object.keys(tracks) as TrackName[]).map((trackName) => {
+                  const track = tracks[trackName];
+                  return (
+                    <div className="form-check form-switch" key={trackName}>
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        id={`switch-${trackName}`}
+                        checked={!track.muted}
+                        onChange={() => toggleMute(trackName)}
+                      />
+                      <label
+                        className="form-check-label"
+                        htmlFor={`switch-${trackName}`}
+                        style={{ opacity: track.muted ? 0.5 : 1 }}
+                      >
+                        {capitalize(trackName)}
+                      </label>
+                    </div>
+                  );
+                })}
+              </fieldset>
+
+              <div className="mb-3">
+                <button type="button" className="btn btn-primary" onClick={processAllTracks}>
+                  Apply
+                </button>
+              </div>
+
+              <div className="mb-3">
+                {!isPlaying ? (
+                  <button type="button" className="btn btn-success" onClick={handlePlay} disabled={isProcessing}>
+                    Play All
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-success" onClick={handleStop}>
+                    Stop All
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </form>
+      </main>
     </div>
   );
 };
