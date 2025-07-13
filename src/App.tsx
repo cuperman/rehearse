@@ -39,8 +39,9 @@ const App: React.FC = () => {
   const [baseBpm, setBaseBpm] = useState(BASE_BPM);
   const [bpm, setBpm] = useState<number>(BASE_BPM);
   const [pitchSemitones, setPitchSemitones] = useState(0);
-
   const [sources, setSources] = useState<AudioBufferSourceNode[]>([]);
+  const [lastProcessedBpm, setLastProcessedBpm] = useState<number | null>(null);
+  const [lastProcessedPitch, setLastProcessedPitch] = useState<number>(0);
 
   useEffect(() => {
     const loadLibrary = async () => {
@@ -81,6 +82,8 @@ const App: React.FC = () => {
     }
 
     setTracks(newTracks);
+    setLastProcessedBpm(song.tempo);
+    setLastProcessedPitch(0);
     setIsLoading(false);
   };
 
@@ -102,7 +105,6 @@ const App: React.FC = () => {
 
       const filter = new SimpleFilter(new WebAudioBufferSource(originalBuffer), soundTouch);
 
-      // Create offline context to render processed buffer
       const offlineCtx = new OfflineAudioContext(
         originalBuffer.numberOfChannels,
         originalBuffer.length,
@@ -117,6 +119,8 @@ const App: React.FC = () => {
     }
 
     setTracks(newTracks);
+    setLastProcessedBpm(bpm);
+    setLastProcessedPitch(pitchSemitones);
     setIsProcessing(false);
   };
 
@@ -143,6 +147,24 @@ const App: React.FC = () => {
     setIsPlaying(true);
   };
 
+  const handlePlayClick = async () => {
+    // Stop if already playing
+    if (isPlaying) {
+      handleStop();
+      return;
+    }
+
+    // Determine if processing is required
+    const needsProcessing =
+      lastProcessedBpm === null || bpm !== lastProcessedBpm || pitchSemitones !== lastProcessedPitch;
+
+    if (needsProcessing) {
+      await processAllTracks();
+    }
+
+    handlePlay();
+  };
+
   const handleStop = () => {
     sources.forEach((source) => {
       source.stop();
@@ -152,6 +174,10 @@ const App: React.FC = () => {
   };
 
   const toggleMute = (track: TrackName) => {
+    if (isPlaying) {
+      handleStop();
+    }
+
     setTracks((prev) => ({
       ...prev,
       [track]: {
@@ -185,6 +211,7 @@ const App: React.FC = () => {
                   loadBuffers(song);
                 }
               }}
+              disabled={isProcessing || isLoading}
             >
               <option>-- Select a song --</option>
               {library.map((song) => (
@@ -199,8 +226,6 @@ const App: React.FC = () => {
             <p>Please select a song to begin.</p>
           ) : isLoading ? (
             <p>Loading tracks...</p>
-          ) : isProcessing ? (
-            <p>Processing tempo/pitch...</p>
           ) : (
             <>
               <div className="mb-3">
@@ -212,7 +237,11 @@ const App: React.FC = () => {
                   max={baseBpm + 50}
                   step={1}
                   value={bpm}
-                  onChange={(e) => setBpm(parseInt(e.target.value))}
+                  onChange={(e) => {
+                    if (isPlaying) handleStop();
+                    setBpm(parseInt(e.target.value));
+                  }}
+                  disabled={isProcessing || isLoading}
                 />
                 <div className="form-text">{bpm} BPM</div>
               </div>
@@ -225,7 +254,11 @@ const App: React.FC = () => {
                   max={12}
                   step={1}
                   value={pitchSemitones}
-                  onChange={(e) => setPitchSemitones(parseInt(e.target.value))}
+                  onChange={(e) => {
+                    if (isPlaying) handleStop();
+                    setPitchSemitones(parseInt(e.target.value));
+                  }}
+                  disabled={isProcessing || isLoading}
                 />
                 <div className="form-text">{pitchSemitones >= 0 ? `+${pitchSemitones}` : pitchSemitones} semitones</div>
               </div>
@@ -243,6 +276,7 @@ const App: React.FC = () => {
                         id={`switch-${trackName}`}
                         checked={!track.muted}
                         onChange={() => toggleMute(trackName)}
+                        disabled={isProcessing || isLoading}
                       />
                       <label
                         className="form-check-label"
@@ -257,21 +291,14 @@ const App: React.FC = () => {
               </fieldset>
 
               <div className="mb-3">
-                <button type="button" className="btn btn-primary" onClick={processAllTracks}>
-                  Apply
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handlePlayClick}
+                  disabled={isProcessing || isLoading}
+                >
+                  {isProcessing ? "Processing..." : isPlaying ? "Stop" : "Play"}
                 </button>
-              </div>
-
-              <div className="mb-3">
-                {!isPlaying ? (
-                  <button type="button" className="btn btn-success" onClick={handlePlay} disabled={isProcessing}>
-                    Play All
-                  </button>
-                ) : (
-                  <button type="button" className="btn btn-success" onClick={handleStop}>
-                    Stop All
-                  </button>
-                )}
               </div>
             </>
           )}
