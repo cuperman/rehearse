@@ -293,11 +293,24 @@ const App: React.FC = () => {
               <div className="mb-3">
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className={`btn ${isProcessing ? "btn-warning" : isPlaying ? "btn-danger" : "btn-success"}`}
                   onClick={handlePlayClick}
                   disabled={isProcessing || isLoading}
                 >
-                  {isProcessing ? "Processing..." : isPlaying ? "Stop" : "Play"}
+                  {isProcessing ? (
+                    <>
+                      <i className="bi bi-arrow-repeat spinner-border spinner-border-sm me-2"></i>
+                      Processing...
+                    </>
+                  ) : isPlaying ? (
+                    <>
+                      <i className="bi bi-stop-fill me-2"></i> Stop
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-play-fill me-2"></i> Play
+                    </>
+                  )}
                 </button>
               </div>
             </>
