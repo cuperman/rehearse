@@ -1,92 +1,194 @@
 import React, { useEffect, useState } from "react";
 import * as Tone from "tone";
-import "./App.css"; // for CSS styles below
+import { SoundTouch, SimpleFilter, getWebAudioNode, WebAudioBufferSource } from "soundtouchjs";
 
 type TrackName = "bass" | "drums" | "other" | "vocals";
 
-function App() {
-  const [players, setPlayers] = useState<Tone.Players | null>(null);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [muteStates, setMuteStates] = useState<Record<TrackName, boolean>>({
-    bass: false,
-    drums: false,
-    other: false,
-    vocals: false,
-  });
+type TrackState = {
+  buffer: AudioBuffer | null;
+  processedBuffer: AudioBuffer | null;
+  muted: boolean;
+};
 
-  // Initialize Tone.Players on mount
+const BASE_BPM = 95; // replace with the original tempo of your track
+
+const INITIAL_TRACKS: Record<TrackName, TrackState> = {
+  bass: { buffer: null, processedBuffer: null, muted: false },
+  drums: { buffer: null, processedBuffer: null, muted: false },
+  other: { buffer: null, processedBuffer: null, muted: false },
+  vocals: { buffer: null, processedBuffer: null, muted: false },
+};
+
+const App: React.FC = () => {
+  const [audioCtx] = useState(new AudioContext());
+  const [tracks, setTracks] = useState(INITIAL_TRACKS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [bpm, setBpm] = useState(BASE_BPM);
+  const [pitchSemitones, setPitchSemitones] = useState(0);
+
+  const [sources, setSources] = useState<AudioBufferSourceNode[]>([]);
+
+  // Load all audio buffers on mount
   useEffect(() => {
-    const playerMap: Record<TrackName, string> = {
-      bass: "/stems/this_love/bass.wav",
-      drums: "/stems/this_love/drums.wav",
-      other: "/stems/this_love/other.wav",
-      vocals: "/stems/this_love/vocals.wav",
+    const loadBuffers = async () => {
+      setIsLoading(true);
+      const newTracks = { ...INITIAL_TRACKS };
+
+      for (const track of Object.keys(newTracks) as TrackName[]) {
+        const response = await fetch(`/stems/this_love/${track}.wav`);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+        newTracks[track].buffer = audioBuffer;
+        newTracks[track].processedBuffer = audioBuffer; // Initially same as original
+      }
+
+      setTracks(newTracks);
+      setIsLoading(false);
     };
 
-    const loadedPlayers = new Tone.Players(playerMap, () => {
-      console.log("All tracks loaded!");
-    }).toDestination();
+    loadBuffers();
+  }, [audioCtx]);
 
-    setPlayers(loadedPlayers);
-  }, []);
+  const processAllTracks = async () => {
+    setIsProcessing(true);
+    const newTracks = { ...tracks };
+
+    for (const track of Object.keys(newTracks) as TrackName[]) {
+      const originalBuffer = newTracks[track].buffer;
+      if (!originalBuffer) continue;
+
+      const soundTouch = new SoundTouch(originalBuffer.sampleRate);
+
+      const tempoRatio = bpm / BASE_BPM;
+      soundTouch.tempo = tempoRatio;
+
+      const pitchRatio = Math.pow(2, pitchSemitones / 12);
+      soundTouch.pitch = pitchRatio;
+
+      const filter = new SimpleFilter(new WebAudioBufferSource(originalBuffer), soundTouch);
+
+      // Create offline context to render processed buffer
+      const offlineCtx = new OfflineAudioContext(
+        originalBuffer.numberOfChannels,
+        originalBuffer.length,
+        originalBuffer.sampleRate
+      );
+
+      const node = getWebAudioNode(offlineCtx, filter);
+      node.connect(offlineCtx.destination);
+
+      const renderedBuffer = await offlineCtx.startRendering();
+      newTracks[track].processedBuffer = renderedBuffer;
+    }
+
+    setTracks(newTracks);
+    setIsProcessing(false);
+  };
 
   const handlePlay = async () => {
-    if (!players) return;
+    if (isPlaying) return;
 
-    await Tone.start(); // Required on user gesture to unlock audio
+    await Tone.start(); // Unlock audio on user gesture
 
-    players.stopAll(); // Ensure no overlaps
+    const newSources: AudioBufferSourceNode[] = [];
+    const now = audioCtx.currentTime;
 
-    players.player("bass").start(0);
-    players.player("drums").start(0);
-    players.player("other").start(0);
-    players.player("vocals").start(0);
+    for (const track of Object.keys(tracks) as TrackName[]) {
+      const trackData = tracks[track];
+      if (!trackData.processedBuffer) continue;
 
+      const source = audioCtx.createBufferSource();
+      source.buffer = trackData.processedBuffer;
+      source.connect(trackData.muted ? audioCtx.createGain() : audioCtx.destination);
+      source.start(now);
+      newSources.push(source);
+    }
+
+    setSources(newSources);
     setIsPlaying(true);
   };
 
   const handleStop = () => {
-    if (!players) return;
-
-    players.stopAll();
+    sources.forEach((source) => {
+      source.stop();
+    });
+    setSources([]);
     setIsPlaying(false);
   };
 
   const toggleMute = (track: TrackName) => {
-    if (!players) return;
-
-    const newMuteState = !muteStates[track];
-    players.player(track).mute = newMuteState;
-
-    setMuteStates((prev) => ({
+    setTracks((prev) => ({
       ...prev,
-      [track]: newMuteState,
+      [track]: {
+        ...prev[track],
+        muted: !prev[track].muted,
+      },
     }));
   };
 
   return (
     <div>
-      <h1>Multi-Track Stem Player</h1>
+      <h1>Multi-Track Player with Tempo & Pitch</h1>
 
-      {!isPlaying ? (
-        <button onClick={handlePlay}>Play All</button>
+      {isLoading ? (
+        <p>Loading tracks...</p>
+      ) : isProcessing ? (
+        <p>Processing tempo/pitch...</p>
       ) : (
-        <button onClick={handleStop}>Stop All</button>
-      )}
-
-      <div>
-        <h2>Tracks</h2>
-        {(["bass", "drums", "other", "vocals"] as TrackName[]).map((track) => (
-          <div key={track} className="track-container">
-            <span className={muteStates[track] ? "muted" : ""}>{track}</span>
-            <button onClick={() => toggleMute(track)}>
-              {muteStates[track] ? "Unmute" : "Mute"}
-            </button>
+        <>
+          <div>
+            <label>Tempo (BPM): </label>
+            <input
+              type="range"
+              min={BASE_BPM - 50}
+              max={BASE_BPM + 50}
+              step={1}
+              value={bpm}
+              onChange={(e) => setBpm(parseInt(e.target.value))}
+            />
+            <span>{bpm} BPM</span>
           </div>
-        ))}
-      </div>
+
+          <div>
+            <label>Pitch (semitones): </label>
+            <input
+              type="range"
+              min={-12}
+              max={12}
+              step={1}
+              value={pitchSemitones}
+              onChange={(e) => setPitchSemitones(parseInt(e.target.value))}
+            />
+            <span>{pitchSemitones >= 0 ? `+${pitchSemitones}` : pitchSemitones} semitones</span>
+          </div>
+
+          <button onClick={processAllTracks}>Apply Tempo/Pitch</button>
+
+          {!isPlaying ? (
+            <button onClick={handlePlay} disabled={isProcessing}>
+              Play All
+            </button>
+          ) : (
+            <button onClick={handleStop}>Stop All</button>
+          )}
+
+          <h2>Tracks</h2>
+          {(Object.keys(tracks) as TrackName[]).map((trackName) => {
+            const track = tracks[trackName as TrackName];
+            return (
+              <div key={trackName}>
+                <span style={{ opacity: track.muted ? 0.5 : 1 }}>{trackName}</span>
+                <button onClick={() => toggleMute(trackName as TrackName)}>{track.muted ? "Unmute" : "Mute"}</button>
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
-}
+};
 
 export default App;
